@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required, immutable) - User ID
+    //   - email: string (required) - User email
+    //   - displayName: string (optional) - User display name
+    //   - photoURL: string (optional) - User photo URL
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //
+    // Collection: users/{userId}/entries
+    // Document ID: {entryId}
+    // Fields:
+    //   - content: string (required, max 280 chars) - Entry text
+    //   - mood: string (optional, enum) - Associated mood
+    //   - createdAt: timestamp (required, immutable) - Creation time
+    //   - uid: string (required, immutable) - Author User ID
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) || request.resource.data.uid == resource.data.uid;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() >= minLen &&
+              request.resource.data[field].size() <= maxLen);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'createdAt']) &&
+             data.uid is string && data.uid == request.auth.uid &&
+             data.email is string && isValidEmail(data.email) &&
+             isValidOptionalString('displayName', 0, 100) &&
+             isValidOptionalString('photoURL', 0, 2048) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidEntry(data) {
+      let allowedMoods = ['happy', 'calm', 'neutral', 'sad', 'anxious', 'angry', 'excited', 'tired', 'focused', 'confused', 'horny'];
+      let hasText = 'content' in data && data.content is string && data.content.size() > 0;
+      let hasImg = 'image' in data && data.image is string && data.image.size() > 0;
+
+      return hasOnlyAllowedFields(['content', 'mood', 'image', 'createdAt', 'uid', 'favorite']) &&
+             (hasText || hasImg) &&
+             isValidOptionalString('content', 0, 280) &&
+             (!( 'mood' in data ) || data.mood in allowedMoods) &&
+             isValidOptionalString('image', 0, 800000) &&
+             (!( 'favorite' in data ) || data.favorite is bool) &&
+             data.createdAt is timestamp &&
+             data.uid is string && data.uid == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && uidUnchanged();
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && uidNotModified() && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isOwner(userId);
+
+      match /entries/{entryId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidEntry(request.resource.data) && uidUnchanged();
+        allow update: if isOwner(userId) && isValidEntry(request.resource.data) && uidNotModified() && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

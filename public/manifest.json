@@ -1,0 +1,17 @@
+{
+  "name": "Corkboard",
+  "short_name": "Corkboard",
+  "description": "Your personal micro-journal. Capture fleeting thoughts and emotions instantly.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAFAFA",
+  "theme_color": "#8D6E63",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

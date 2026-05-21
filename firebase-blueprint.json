@@ -1,0 +1,74 @@
+{
+  "entities": {
+    "Entry": {
+      "title": "Journal Entry",
+      "description": "A micro-journal entry representing a thought or emotion.",
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string",
+          "description": "The text content of the entry."
+        },
+        "image": {
+          "type": "string",
+          "description": "A base64 encoded downsized image attached to the entry."
+        },
+        "mood": {
+          "type": "string",
+          "description": "The emotion or mood associated with the entry.",
+          "enum": ["happy", "calm", "neutral", "sad", "anxious", "angry", "excited", "tired", "focused", "confused", "horny"]
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the entry was created."
+        },
+        "uid": {
+          "type": "string",
+          "description": "The user ID of the author."
+        },
+        "favorite": {
+          "type": "boolean",
+          "description": "Whether the entry has been favorited by the user."
+        }
+      },
+      "required": ["createdAt", "uid"]
+    },
+    "User": {
+      "title": "User Profile",
+      "description": "User profile information.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "photoURL": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "timestamp"
+        }
+      },
+      "required": ["uid", "email", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "Stores user profile data."
+    },
+    "/users/{userId}/entries/{entryId}": {
+      "schema": {
+        "$ref": "#/entities/Entry"
+      },
+      "description": "Stores journal entries for a specific user."
+    }
+  }
+}

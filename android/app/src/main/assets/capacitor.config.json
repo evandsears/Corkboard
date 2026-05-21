@@ -1,0 +1,5 @@
+{
+	"appId": "com.corkboard.app",
+	"appName": "Corkboard",
+	"webDir": "dist"
+}
