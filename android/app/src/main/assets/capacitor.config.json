@@ -1,5 +1,10 @@
 {
 	"appId": "com.corkboard.app",
 	"appName": "Corkboard",
-	"webDir": "dist"
+	"webDir": "dist",
+	"plugins": {
+		"LocalNotifications": {
+			"smallIcon": "ic_stat_corkboard"
+		}
+	}
 }

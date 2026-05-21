@@ -4,7 +4,7 @@ import { deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { Entry, Mood } from '../types';
 import { formatDistanceToNow } from 'date-fns';
-import { Trash2, Pencil, X, Heart, Shuffle } from 'lucide-react';
+import { Trash2, X, Heart, Shuffle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { AnimatePresence, motion } from 'motion/react';
 
@@ -165,13 +165,6 @@ export function RandomView({ entries, onEdit, loading }: RandomViewProps) {
                 title={entry.favorite ? "Unfavorite" : "Favorite"}
               >
                 <Heart size={16} className={cn(entry.favorite && "fill-current")} />
-              </button>
-              <button 
-                onClick={() => onEdit(entry)}
-                className="p-1.5 text-md-sys-color-on-surface-variant hover:bg-md-sys-color-surface-variant hover:text-md-sys-color-on-surface rounded-full transition-colors"
-                title="Edit entry"
-              >
-                <Pencil size={16} />
               </button>
               <button 
                 onClick={() => setEntryToDelete(entry.id)}

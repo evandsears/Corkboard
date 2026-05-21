@@ -8,7 +8,8 @@ import { GalleryView } from './components/GalleryView';
 import { RandomView } from './components/RandomView';
 import { AdBanner } from './components/AdBanner';
 import { Compose } from './components/Compose';
-import { Plus, LogOut, Pin, LayoutList, Calendar as CalendarIcon, Image as ImageIcon, Shuffle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { SettingsModal } from './components/SettingsModal';
+import { Plus, Pin, LayoutList, PieChart as PieChartIcon, Image as ImageIcon, Shuffle, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Entry } from './types';
 import { cn } from './lib/utils';
@@ -136,6 +137,7 @@ export default function App() {
   const [user, setUser] = useState(auth.currentUser);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(true);
@@ -154,6 +156,9 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAuthReady(true);
+      if (currentUser) {
+        import('./lib/notifications').then((m) => m.scheduleDailyReminder());
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -409,6 +414,34 @@ export default function App() {
     );
   }
 
+  const renderHeaderAvatar = (photoURL: string | null | undefined) => {
+    if (!photoURL) {
+      return (
+        <div className="w-8 h-8 rounded-full bg-md-sys-color-primary-container text-md-sys-color-on-primary-container flex items-center justify-center font-bold text-sm">
+          👤
+        </div>
+      );
+    }
+    
+    const isEmoji = !photoURL.startsWith('http') && !photoURL.startsWith('data:') && !photoURL.includes('/');
+    if (isEmoji) {
+      return (
+        <div className="w-8 h-8 rounded-full bg-md-sys-color-primary-container/80 border border-md-sys-color-surface-variant/40 flex items-center justify-center select-none text-[16px] leading-none">
+          {photoURL}
+        </div>
+      );
+    }
+    
+    return (
+      <img 
+        src={photoURL} 
+        alt="Profile" 
+        className="w-8 h-8 rounded-full object-cover border border-md-sys-color-surface-variant/60"
+        referrerPolicy="no-referrer"
+      />
+    );
+  };
+
   return (
     <div className="min-h-screen bg-md-sys-color-background text-md-sys-color-on-background font-sans selection:bg-md-sys-color-primary-container selection:text-md-sys-color-on-primary-container">
       {/* Top App Bar */}
@@ -422,20 +455,13 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-2 sm:gap-4">
-            {user.photoURL && (
-              <img 
-                src={user.photoURL} 
-                alt="Profile" 
-                className="w-8 h-8 rounded-full border border-md-sys-color-surface-variant"
-                referrerPolicy="no-referrer"
-              />
-            )}
-            <button 
-              onClick={handleSignOut}
-              className="p-2 text-md-sys-color-on-surface-variant hover:bg-md-sys-color-surface-variant rounded-full transition-colors"
-              title="Sign out"
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="flex items-center gap-2 p-1 pr-2.5 sm:pr-3 rounded-full hover:bg-md-sys-color-surface-variant/70 border border-md-sys-color-surface-variant/30 text-md-sys-color-on-surface transition-all active:scale-95"
+              title="Journal Settings"
             >
-              <LogOut size={20} />
+              {renderHeaderAvatar(user.photoURL)}
+              <Settings size={18} className="text-md-sys-color-on-surface-variant" />
             </button>
           </div>
         </div>
@@ -508,8 +534,8 @@ export default function App() {
             onClick={() => handleViewChange('calendar')}
             className={cn("flex flex-col items-center justify-center w-16 h-full gap-1 transition-colors", view === 'calendar' ? "text-md-sys-color-primary" : "text-md-sys-color-on-surface-variant hover:text-md-sys-color-on-surface")}
           >
-            <CalendarIcon size={24} className={cn(view === 'calendar' && "fill-md-sys-color-primary-container/50")} />
-            <span className="text-[10px] font-medium">Calendar</span>
+            <PieChartIcon size={24} className={cn(view === 'calendar' && "fill-md-sys-color-primary-container/50")} />
+            <span className="text-[10px] font-medium">Stats</span>
           </button>
           <button
             onClick={() => handleViewChange('gallery')}
@@ -538,6 +564,18 @@ export default function App() {
           }} 
         />
       )}
+
+      {/* Settings Modal */}
+      <AnimatePresence>
+        {isSettingsOpen && (
+          <SettingsModal 
+            onClose={() => setIsSettingsOpen(false)}
+            onUserUpdate={(updatedUser) => {
+              setUser(updatedUser);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

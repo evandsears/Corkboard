@@ -113,6 +113,8 @@ export function Compose({ onClose, entryToEdit }: ComposeProps) {
         await addDoc(collection(db, 'users', auth.currentUser.uid, 'entries'), entryData);
       }
       
+      import('../lib/notifications').then((m) => m.scheduleDailyReminder());
+      
       onClose();
     } catch (error) {
       console.error("Error adding entry: ", error);
@@ -124,10 +126,10 @@ export function Compose({ onClose, entryToEdit }: ComposeProps) {
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
-      <div className="bg-md-sys-color-surface w-full max-w-lg rounded-t-[32px] sm:rounded-[32px] shadow-xl overflow-hidden flex flex-col h-[90vh] sm:h-auto max-h-[800px] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-8 duration-300">
+      <div className="bg-md-sys-color-surface w-full max-w-lg rounded-t-[24px] sm:rounded-[32px] shadow-xl overflow-hidden flex flex-col h-[calc(100dvh-20px)] sm:h-auto max-h-[100dvh] sm:max-h-[800px] animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-8 duration-300">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-md-sys-color-surface-variant">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-md-sys-color-surface-variant">
           <button 
             onClick={onClose}
             className="p-2 -ml-2 rounded-full hover:bg-md-sys-color-surface-variant text-md-sys-color-on-surface transition-colors"
@@ -137,7 +139,7 @@ export function Compose({ onClose, entryToEdit }: ComposeProps) {
           <button
             onClick={handleSubmit}
             disabled={(!content.trim() && !image) || charsLeft < 0 || isSubmitting}
-            className="bg-md-sys-color-primary text-md-sys-color-on-primary px-6 py-2.5 rounded-full font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+            className="bg-md-sys-color-primary text-md-sys-color-on-primary px-5 py-2 sm:px-6 sm:py-2.5 rounded-full font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 text-sm sm:text-base"
           >
             {isSubmitting ? (entryToEdit ? 'Updating...' : 'Saving...') : (entryToEdit ? 'Update' : 'Save')}
             {isSubmitting ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
@@ -145,13 +147,13 @@ export function Compose({ onClose, entryToEdit }: ComposeProps) {
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex flex-col gap-4 sm:gap-6">
           <textarea
             autoFocus
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Pin a new thought..."
-            className="w-full flex-1 min-h-[150px] text-xl resize-none bg-transparent outline-none placeholder:text-md-sys-color-outline text-md-sys-color-on-surface font-sans leading-relaxed"
+            className="w-full flex-1 min-h-[60px] sm:min-h-[150px] text-lg sm:text-xl resize-none bg-transparent outline-none placeholder:text-md-sys-color-outline text-md-sys-color-on-surface font-sans leading-relaxed"
           />
           
           {image && (
