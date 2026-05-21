@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { auth, db } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp, collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
@@ -158,9 +158,9 @@ export default function App() {
     }
   };
 
-  const handleLoadMore = () => {
-    setPostsLimit((prev) => prev + 10);
-  };
+  const handleLoadMore = useCallback(() => {
+    setPostsLimit((prev) => Math.min(prev + 10, 9990));
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {

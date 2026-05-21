@@ -140,6 +140,7 @@ export function Feed({ entries, allEntries, loading, onEdit, hasMore, onLoadMore
       setEntryToDelete(null);
     } catch (error) {
       console.error("Error deleting entry:", error);
+      alert(error instanceof Error ? `Failed to delete entry: ${error.message}` : "Failed to delete entry.");
     } finally {
       setIsDeleting(false);
     }
@@ -605,20 +606,25 @@ export function Feed({ entries, allEntries, loading, onEdit, hasMore, onLoadMore
               </span>
             </div>
             
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 font-sans select-none">
               <button 
                 onClick={() => toggleFavorite(entry)}
-                className={cn("p-1.5 rounded-full transition-colors", entry.favorite ? "text-red-500 hover:bg-red-50" : "text-md-sys-color-on-surface-variant hover:bg-md-sys-color-surface-variant hover:text-md-sys-color-on-surface")}
+                className={cn(
+                  "w-11 h-11 flex items-center justify-center rounded-full transition-colors active:scale-90 cursor-pointer min-w-[44px] min-h-[44px]", 
+                  entry.favorite 
+                    ? "text-red-500 hover:bg-red-500/10" 
+                    : "text-md-sys-color-on-surface-variant hover:bg-md-sys-color-surface-variant/70 hover:text-md-sys-color-on-surface"
+                )}
                 title={entry.favorite ? "Unfavorite" : "Favorite"}
               >
-                <Heart size={16} className={cn(entry.favorite && "fill-current")} />
+                <Heart size={18} className={cn(entry.favorite && "fill-current")} />
               </button>
               <button 
                 onClick={() => setEntryToDelete(entry.id)}
-                className="p-1.5 text-md-sys-color-on-surface-variant hover:bg-md-sys-color-error-container hover:text-md-sys-color-error rounded-full transition-colors"
+                className="w-11 h-11 flex items-center justify-center text-md-sys-color-on-surface-variant hover:bg-md-sys-color-error-container hover:text-md-sys-color-error rounded-full transition-colors active:scale-90 cursor-pointer min-w-[44px] min-h-[44px]"
                 title="Delete entry"
               >
-                <Trash2 size={16} />
+                <Trash2 size={18} />
               </button>
             </div>
           </div>
@@ -662,20 +668,25 @@ export function Feed({ entries, allEntries, loading, onEdit, hasMore, onLoadMore
 
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
-        {entryToDelete && createPortal(
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4"
-          >
+        {entryToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              onClick={() => setEntryToDelete(null)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-xs cursor-pointer"
+            />
+            {/* Dialog Card */}
             <motion.div 
               initial={{ scale: 0.9, opacity: 0, y: 15 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 10 }}
               transition={{ type: "spring", stiffness: 400, damping: 28 }}
-              className="bg-md-sys-color-surface w-full max-w-sm rounded-[28px] shadow-xl p-6 flex flex-col gap-4 border border-md-sys-color-surface-variant/30"
+              className="relative bg-md-sys-color-surface w-full max-w-sm rounded-[28px] shadow-xl p-6 flex flex-col gap-4 border border-md-sys-color-surface-variant/30 z-10"
+              onClick={(e) => e.stopPropagation()}
             >
               <h3 className="text-2xl font-display font-semibold text-md-sys-color-on-surface">Delete entry?</h3>
               <p className="text-md-sys-color-on-surface-variant">
@@ -698,8 +709,7 @@ export function Feed({ entries, allEntries, loading, onEdit, hasMore, onLoadMore
                 </button>
               </div>
             </motion.div>
-          </motion.div>,
-          document.body
+          </div>
         )}
       </AnimatePresence>
 

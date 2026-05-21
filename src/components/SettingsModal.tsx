@@ -373,7 +373,7 @@ export function SettingsModal({ onClose, onUserUpdate }: SettingsModalProps) {
                     <div>
                       <h4 className="font-bold text-md-sys-color-on-surface mb-1">5. Contact & Support</h4>
                       <p>
-                        If you have any questions about this policy or your account, please feel free to contact us at support@corkboard.app.
+                        If you have any questions about this policy or your account, please feel free to contact us at evan.sears@atomicmail.io.
                       </p>
                     </div>
                     <div className="text-[10px] text-md-sys-color-on-surface-variant/60 border-t border-md-sys-color-surface-variant/40 pt-2 text-center">
