@@ -80,7 +80,7 @@ service cloud.firestore {
              data.uid is string && data.uid == request.auth.uid &&
              data.email is string && isValidEmail(data.email) &&
              isValidOptionalString('displayName', 0, 100) &&
-             isValidOptionalString('photoURL', 0, 2048) &&
+             isValidOptionalString('photoURL', 0, 300000) &&
              data.createdAt is timestamp;
     }
 

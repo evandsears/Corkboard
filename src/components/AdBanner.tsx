@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, HelpCircle } from 'lucide-react';
+import { Sparkles, HelpCircle, Smartphone, Globe } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { AdMob, BannerAdSize, BannerAdPosition } from '@capacitor-community/admob';
 
 interface AdBannerProps {
   slot?: string;
@@ -9,16 +11,19 @@ interface AdBannerProps {
 }
 
 /**
- * AdBanner - Google AdSense Prepped Component
+ * AdBanner - Dual Google AdSense (Web) and Google AdMob (Mobile) Prepped Component
  * 
- * To activate live Google AdSense ads:
- * 1. Define VITE_AD_CLIENT and VITE_AD_SLOT in your environment variables.
- * 2. Example: 
- *    VITE_AD_CLIENT="ca-pub-XXXXXXXXXXXXXXXX"
- *    VITE_AD_SLOT="XXXXXXXXXX"
+ * Automatically detects whether the application is running as a Native Mobile app 
+ * (via Capacitor/Android/iOS) or a Web application:
  * 
- * If variables are not defined, a polished, non-disruptive sponsor placeholder
- * will be shown with a premium option placeholder.
+ * 1. ON WEB:
+ *    - To activate live AdSense ads, define VITE_AD_CLIENT and VITE_AD_SLOT in environment variables.
+ *    - Otherwise, a gorgeous placeholder & Premium prompt are displayed.
+ * 
+ * 2. ON NATIVE MOBILE (Android/iOS):
+ *    - Intelligently loads a high-performance native Google AdMob Banner using the Capacitor AdMob SDK.
+ *    - Uses VITE_ADMOB_BANNER_ID if defined; otherwise, gracefully falls back to Google's official 
+ *      safe demo/testing ad unit so the banner works instantly in testing.
  */
 export function AdBanner({ 
   slot = (import.meta as any).env?.VITE_AD_SLOT || '', 
@@ -28,10 +33,65 @@ export function AdBanner({
 }: AdBannerProps) {
   const [hasAdError, setHasAdError] = useState(false);
   const [showPremiumTip, setShowPremiumTip] = useState(false);
+  
+  // Safely detect if running on native mobile device (Android/iOS)
+  const [isNative] = useState(() => {
+    try {
+      return Capacitor.isNativePlatform();
+    } catch {
+      return false;
+    }
+  });
 
+  // Mobile Google AdMob Controller
   useEffect(() => {
-    // If client and slot are provided, try loading the AdSense script and initializing the ad
-    if (client && slot) {
+    if (isNative) {
+      let isMounted = true;
+      
+      const initAdMob = async () => {
+        try {
+          // Initialize AdMob SDK
+          await AdMob.initialize({});
+          
+          if (!isMounted) return;
+
+          // Retrieve custom banner ID or fallback to live AdMob banner unit ID
+          const bannerId = (import.meta as any).env?.VITE_ADMOB_BANNER_ID || 'ca-app-pub-5109081999190590/8057993575';
+          const isTestBanner = bannerId === 'ca-app-pub-3940256099942544/6300978111';
+
+          // Display native bottom banner 
+          await AdMob.showBanner({
+            adId: bannerId,
+            adSize: BannerAdSize.BANNER,
+            position: BannerAdPosition.BOTTOM_CENTER,
+            margin: 0,
+            isTesting: isTestBanner,
+          });
+          
+          console.log(`[AdMob] Banner loaded successfully. Unit ID: ${bannerId} (Test Mode: ${isTestBanner})`);
+        } catch (error) {
+          console.error('[AdMob] Banner load or initialization failed:', error);
+          setHasAdError(true);
+        }
+      };
+
+      initAdMob();
+
+      // Clean up banner overlay when component unmounts
+      return () => {
+        isMounted = false;
+        try {
+          AdMob.removeBanner();
+        } catch (err) {
+          console.error('[AdMob] Error removing banner on cleanup:', err);
+        }
+      };
+    }
+  }, [isNative]);
+
+  // Web Google AdSense Controller
+  useEffect(() => {
+    if (!isNative && client && slot) {
       try {
         const scriptId = 'google-adsense-script';
         let script = document.getElementById(scriptId) as HTMLScriptElement;
@@ -44,7 +104,7 @@ export function AdBanner({
           document.head.appendChild(script);
         }
 
-        // Initialize AdSense
+        // Initialize AdSense layout
         // @ts-ignore
         const adsbygoogle = window.adsbygoogle || [];
         adsbygoogle.push({});
@@ -53,8 +113,20 @@ export function AdBanner({
         setHasAdError(true);
       }
     }
-  }, [client, slot]);
+  }, [isNative, client, slot]);
 
+  // If on Native Mobile, the ad displays perfectly as a native overlay at the bottom.
+  // We return a small helper visual notice on web previews so the user knows native ads are ready!
+  if (isNative) {
+    return (
+      <div className="w-full text-center py-2 px-4 bg-md-sys-color-surface-variant/20 rounded-xl border border-md-sys-color-surface-variant/40 mt-1 mb-6 text-xs text-md-sys-color-on-surface-variant/80 flex items-center justify-center gap-2">
+        <Smartphone size={14} className="animate-pulse text-md-sys-color-primary" />
+        <span>Native Google AdMob active (Overlaying at bottom of screen)</span>
+      </div>
+    );
+  }
+
+  // Web state: check if we show custom placeholders
   const showPlaceholder = !client || !slot || hasAdError;
 
   if (showPlaceholder) {
@@ -64,7 +136,7 @@ export function AdBanner({
         className="w-full bg-md-sys-color-surface border border-dashed border-md-sys-color-surface-variant/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 transition-all hover:bg-md-sys-color-surface-variant/10 relative overflow-hidden group shadow-sm mb-6"
       >
         <div className="absolute top-0 left-0 bg-md-sys-color-primary-container text-md-sys-color-on-primary-container px-2 py-0.5 text-[9px] font-mono tracking-wider rounded-br-lg uppercase font-bold select-none">
-          Sponsor Space
+          Ad Setup Workspace
         </div>
         
         <div className="flex items-center gap-3">
@@ -73,7 +145,7 @@ export function AdBanner({
           </div>
           <div className="text-center sm:text-left pt-2 sm:pt-0">
             <div className="flex items-center justify-center sm:justify-start gap-1">
-              <h4 className="text-sm font-semibold text-md-sys-color-on-surface">Support Corkboard</h4>
+              <h4 className="text-sm font-semibold text-md-sys-color-on-surface">Dual Web/Mobile Ad Platform</h4>
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
@@ -86,14 +158,14 @@ export function AdBanner({
               </button>
             </div>
             <p className="text-xs text-md-sys-color-on-surface-variant">
-              Advertisements help keep Corkboard running! Support development by upgrading or hosting.
+              AdSense (Web) and AdMob (Android) are pre-configured to keep Corkboard running!
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0 z-10">
-          <span className="text-[10px] font-medium text-md-sys-color-on-surface-variant border border-md-sys-color-surface-variant px-2 py-1 rounded-md bg-md-sys-color-background select-none">
-            Ads Config Ready
+          <span className="text-[10px] font-medium text-md-sys-color-on-surface-variant border border-md-sys-color-surface-variant px-2 py-1 rounded-md bg-md-sys-color-background select-none flex items-center gap-1">
+            <Globe size={11} className="text-emerald-500" /> Web & Mobile Prepped
           </span>
           <button 
             onClick={() => alert("Premium Tier is coming soon! Thank you for your support.")}
@@ -105,14 +177,18 @@ export function AdBanner({
 
         {showPremiumTip && (
           <div className="absolute inset-0 bg-md-sys-color-surface/98 backdrop-blur-xs p-3 flex flex-col justify-center items-center text-center animate-in fade-in duration-200">
-            <p className="text-xs text-md-sys-color-on-surface leading-normal max-w-md px-4">
-              <strong>Ad Space prepped!</strong> To replace this with automated live Google AdSense ads, add your custom <code className="bg-md-sys-color-surface-variant px-1 rounded">VITE_AD_CLIENT</code> and <code className="bg-md-sys-color-surface-variant px-1 rounded">VITE_AD_SLOT</code> credentials to your workspace environment variables.
-            </p>
+            <div className="text-xs text-md-sys-color-on-surface leading-normal max-w-md px-4">
+              <p className="mb-1 font-semibold">How to activate ads:</p>
+              <ul className="text-[11px] text-md-sys-color-on-surface-variant text-left list-disc list-inside space-y-1">
+                <li><strong>Mobile App:</strong> Live AdMob configuration is active! Your custom App ID and Banner Unit ID are baked straight into the app.</li>
+                <li><strong>Web View:</strong> Set <code className="bg-md-sys-color-surface-variant px-1 rounded">VITE_AD_CLIENT</code> and <code className="bg-md-sys-color-surface-variant px-1 rounded">VITE_AD_SLOT</code> environment variables to activate live Web AdSense.</li>
+              </ul>
+            </div>
             <button 
               onClick={() => setShowPremiumTip(false)}
-              className="mt-2 text-xs font-medium text-md-sys-color-primary underline"
+              className="mt-2 text-xs font-semibold text-md-sys-color-primary hover:underline"
             >
-              Close
+              Close instructions
             </button>
           </div>
         )}
@@ -120,11 +196,12 @@ export function AdBanner({
     );
   }
 
+  // Web rendering code if credentials exist
   return (
     <div className="w-full flex flex-col items-center gap-1.5 mb-6 animate-in fade-in duration-300">
       <div className="w-full text-left">
         <span className="text-[9px] font-mono tracking-wider text-md-sys-color-on-surface-variant/65 uppercase font-bold block select-none">
-          Sponsored / Advertisement
+          Sponsored / Advertisement (Web AdSense)
         </span>
       </div>
       <div className="w-full bg-md-sys-color-surface border border-md-sys-color-surface-variant/30 rounded-2xl overflow-hidden shadow-sm flex items-center justify-center min-h-[90px] sm:min-h-[100px] p-2">

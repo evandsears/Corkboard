@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { auth, db } from '../firebase';
 import { updateProfile } from 'firebase/auth';
 import { doc, updateDoc, writeBatch, collection, getDocs, deleteDoc } from 'firebase/firestore';
-import { X, LogOut, Trash2, Loader2, Sparkles, User, AlertTriangle, ShieldAlert, Upload } from 'lucide-react';
+import { X, LogOut, Trash2, Loader2, Sparkles, User, AlertTriangle, ShieldAlert, Upload, ShieldCheck, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface SettingsModalProps {
@@ -25,6 +25,7 @@ export function SettingsModal({ onClose, onUserUpdate }: SettingsModalProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<'none' | 'step1' | 'step2'>('none');
   const [deleteInputText, setDeleteInputText] = useState('');
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   if (!user) return null;
 
@@ -306,6 +307,85 @@ export function SettingsModal({ onClose, onUserUpdate }: SettingsModalProps) {
               </div>
             </button>
           </div>
+
+          <hr className="border-md-sys-color-surface-variant/50" />
+
+          {/* Legal & Privacy Section */}
+          <div className="flex flex-col gap-3">
+            <h3 className="text-sm font-bold tracking-wider text-md-sys-color-on-surface-variant uppercase px-0.5">
+              About & Legal
+            </h3>
+            
+            <button
+              onClick={() => setShowPrivacy(!showPrivacy)}
+              className="w-full flex items-center justify-between p-4 bg-md-sys-color-surface border border-md-sys-color-outline/30 rounded-2xl hover:bg-md-sys-color-surface-variant/20 active:scale-[0.99] transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <ShieldCheck size={20} className="text-md-sys-color-primary" />
+                <span className="text-sm font-semibold text-md-sys-color-on-surface">Privacy Policy</span>
+              </div>
+              <motion.span
+                animate={{ rotate: showPrivacy ? 180 : 0 }}
+                transition={{ duration: 0.2 }}
+                className="text-md-sys-color-on-surface-variant/60"
+              >
+                <ChevronDown size={18} />
+              </motion.span>
+            </button>
+
+            <AnimatePresence>
+              {showPrivacy && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="bg-md-sys-color-surface-variant/15 border border-md-sys-color-surface-variant/30 rounded-2xl p-4 text-xs text-md-sys-color-on-surface-variant leading-relaxed flex flex-col gap-3.5">
+                    <p className="font-semibold text-md-sys-color-on-surface">Privacy Policy for Corkboard</p>
+                    <p>
+                      This Privacy Policy describes how Corkboard ("we", "our", or "us") collects, uses, and shares your data when you use the app.
+                    </p>
+                    <div>
+                      <h4 className="font-bold text-md-sys-color-on-surface mb-1">1. Information We Collect</h4>
+                      <p>
+                        We collect information that you explicitly provide, including your email address, profile avatar, and entries (including texts, moods, and photos) which are securely stored on your device and synchronized to your personal database using Google Firestore.
+                      </p>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-md-sys-color-on-surface mb-1">2. Offline Persistence</h4>
+                      <p>
+                        Your micro-journal entries are cached locally using IndexedDB. This ensures that you can read, search, and edit your entries offline at any time without an active internet connection.
+                      </p>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-md-sys-color-on-surface mb-1">3. Advertising Partnerships</h4>
+                      <p>
+                        Corkboard integrates with Google AdMob to display bottom-banner advertisements. While we do not share your direct entry data, Google may use identifiers (such as mobile advertising IDs) or cookies to serve personalized advertisements. You can manage your preferences or request ad personalization opt-outs directly in your mobile settings or browser controls.
+                      </p>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-md-sys-color-on-surface mb-1">4. Data Ownership & Deletion</h4>
+                      <p>
+                        <strong>You own 100% of your data.</strong> At any time, you can permanently delete your entire profile and journal history using the <em>Danger Zone</em> section in settings. This action is absolute and deletes all synchronized documents directly from Firestore.
+                      </p>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-md-sys-color-on-surface mb-1">5. Contact & Support</h4>
+                      <p>
+                        If you have any questions about this policy or your account, please feel free to contact us at support@corkboard.app.
+                      </p>
+                    </div>
+                    <div className="text-[10px] text-md-sys-color-on-surface-variant/60 border-t border-md-sys-color-surface-variant/40 pt-2 text-center">
+                      Last Updated: May 21, 2026
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <hr className="border-md-sys-color-surface-variant/50" />
 
           {/* Danger zone delete all data section */}
           <div className="bg-red-500/5 hover:bg-red-500/10 border-2 border-dashed border-red-500/20 rounded-[28px] p-4 sm:p-5 flex flex-col gap-4 transition-all">

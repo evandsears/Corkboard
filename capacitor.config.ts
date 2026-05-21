@@ -8,6 +8,9 @@ const config: CapacitorConfig = {
     LocalNotifications: {
       smallIcon: 'ic_stat_corkboard',
     },
+    AdMob: {
+      appId: 'ca-app-pub-5109081999190590~3206185208', // Live Google AdMob App ID
+    },
   },
 };
 

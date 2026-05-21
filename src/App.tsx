@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db } from './firebase';
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp, collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp, collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { Feed } from './components/Feed';
 import { CalendarView } from './components/CalendarView';
 import { GalleryView } from './components/GalleryView';
@@ -9,6 +9,7 @@ import { RandomView } from './components/RandomView';
 import { AdBanner } from './components/AdBanner';
 import { Compose } from './components/Compose';
 import { SettingsModal } from './components/SettingsModal';
+import { EmailAuth } from './components/EmailAuth';
 import { Plus, Pin, LayoutList, PieChart as PieChartIcon, Image as ImageIcon, Shuffle, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Entry } from './types';
@@ -138,9 +139,14 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showEmailAuth, setShowEmailAuth] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(true);
+  const [allEntries, setAllEntries] = useState<Entry[]>([]);
+  const [loadingAllEntries, setLoadingAllEntries] = useState(true);
+  const [postsLimit, setPostsLimit] = useState(10);
+  const [hasMore, setHasMore] = useState(false);
   const [view, setView] = useState<'feed' | 'calendar' | 'gallery' | 'random'>('feed');
   const [activeSlide, setActiveSlide] = useState(0);
   const [onboardingDir, setOnboardingDir] = useState(1);
@@ -152,16 +158,49 @@ export default function App() {
     }
   };
 
+  const handleLoadMore = () => {
+    setPostsLimit((prev) => prev + 10);
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAuthReady(true);
       if (currentUser) {
         import('./lib/notifications').then((m) => m.scheduleDailyReminder());
+        // Reset limit on auth change
+        setPostsLimit(10);
       }
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, 'users', user.uid, 'entries'),
+      orderBy('createdAt', 'desc'),
+      limit(postsLimit + 1)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs;
+      const possessesMore = docs.length > postsLimit;
+      const loadedDocs = possessesMore ? docs.slice(0, postsLimit) : docs;
+
+      const newEntries = loadedDocs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Entry[];
+
+      setEntries(newEntries);
+      setHasMore(possessesMore);
+      setLoadingEntries(false);
+    }, (error) => {
+      console.error("Error fetching entries:", error);
+      setLoadingEntries(false);
+    });
+    return () => unsubscribe();
+  }, [user, postsLimit]);
 
   useEffect(() => {
     if (!user) return;
@@ -174,11 +213,11 @@ export default function App() {
         id: doc.id,
         ...doc.data()
       })) as Entry[];
-      setEntries(newEntries);
-      setLoadingEntries(false);
+      setAllEntries(newEntries);
+      setLoadingAllEntries(false);
     }, (error) => {
-      console.error("Error fetching entries:", error);
-      setLoadingEntries(false);
+      console.error("Error fetching all entries:", error);
+      setLoadingAllEntries(false);
     });
     return () => unsubscribe();
   }, [user]);
@@ -394,7 +433,7 @@ export default function App() {
           >
             <button
               onClick={handleSignIn}
-              className="w-full bg-md-sys-color-primary text-md-sys-color-on-primary py-3.5 sm:py-4 rounded-[20px] text-base font-semibold hover:opacity-95 active:scale-98 transition-all flex items-center justify-center gap-3 shadow-md hover:shadow-lg cursor-pointer"
+              className="w-full bg-md-sys-color-primary text-md-sys-color-on-primary py-3.5 sm:py-4 rounded-[20px] text-base font-semibold hover:opacity-95 active:scale-98 transition-all flex items-center justify-center gap-3 shadow-md hover:shadow-lg cursor-pointer animate-duration-300"
               style={{ minHeight: '52px' }}
             >
               <img 
@@ -404,8 +443,38 @@ export default function App() {
               />
               Continue with Google
             </button>
+
+            {/* Collapsible Email & Password Section */}
+            <div className="w-full flex flex-col items-center gap-2">
+              <div className="w-full flex items-center gap-3 py-1">
+                <div className="h-[1px] flex-1 bg-md-sys-color-outline/20" />
+                <button
+                  type="button"
+                  onClick={() => setShowEmailAuth(!showEmailAuth)}
+                  className="text-xs font-bold text-md-sys-color-primary hover:underline hover:opacity-90 active:scale-95 transition-all select-none cursor-pointer"
+                >
+                  {showEmailAuth ? "Hide Email Login" : "Or use Email & Password"}
+                </button>
+                <div className="h-[1px] flex-1 bg-md-sys-color-outline/20" />
+              </div>
+
+              <AnimatePresence initial={false}>
+                {showEmailAuth && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25, ease: "easeInOut" }}
+                    className="w-full overflow-hidden"
+                  >
+                    <EmailAuth />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             <p className="text-[11px] text-md-sys-color-on-surface-variant/70 text-center leading-normal max-w-[280px] select-none">
-              By continuing, your private journal is secured safely with automatic Cloud Firestore protection.
+              Your micro-journal is securely protected with premium zero-trust safety and real-time backend synchronization.
             </p>
           </motion.div>
 
@@ -484,19 +553,22 @@ export default function App() {
             {view === 'feed' && (
               <Feed 
                 entries={entries}
+                allEntries={allEntries}
                 loading={loadingEntries}
+                hasMore={hasMore}
+                onLoadMore={handleLoadMore}
                 onEdit={(entry) => {
                   setEditingEntry(entry);
                   setIsComposeOpen(true);
                 }} 
               />
             )}
-            {view === 'calendar' && <CalendarView entries={entries} loading={loadingEntries} />}
-            {view === 'gallery' && <GalleryView entries={entries} loading={loadingEntries} />}
+            {view === 'calendar' && <CalendarView entries={allEntries} loading={loadingAllEntries} />}
+            {view === 'gallery' && <GalleryView entries={allEntries} loading={loadingAllEntries} />}
             {view === 'random' && (
               <RandomView 
-                entries={entries}
-                loading={loadingEntries}
+                entries={allEntries}
+                loading={loadingAllEntries}
                 onEdit={(entry) => {
                   setEditingEntry(entry);
                   setIsComposeOpen(true);

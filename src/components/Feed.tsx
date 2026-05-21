@@ -24,11 +24,14 @@ const MOOD_MAP: Record<Mood, { emoji: string; color: string }> = {
 
 interface FeedProps {
   entries: Entry[];
+  allEntries?: Entry[];
   loading: boolean;
   onEdit: (entry: Entry) => void;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
 }
 
-export function Feed({ entries, loading, onEdit }: FeedProps) {
+export function Feed({ entries, allEntries, loading, onEdit, hasMore, onLoadMore }: FeedProps) {
   const [entryToDelete, setEntryToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
@@ -38,6 +41,27 @@ export function Feed({ entries, loading, onEdit }: FeedProps) {
   const [filterPhoto, setFilterPhoto] = useState<string>('all');
   const [filterFavorite, setFilterFavorite] = useState<boolean>(false);
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState<boolean>(false);
+
+  const loaderRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!onLoadMore || !hasMore) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        onLoadMore();
+      }
+    }, { threshold: 0.1, rootMargin: '100px' });
+
+    const currentRef = loaderRef.current;
+    if (currentRef) {
+      observer.observe(currentRef);
+    }
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, [onLoadMore, hasMore]);
 
   const activeFiltersCount = React.useMemo(() => {
     let count = 0;
@@ -57,7 +81,8 @@ export function Feed({ entries, loading, onEdit }: FeedProps) {
 
   const availableMonths = React.useMemo(() => {
     const map = new Map<string, string>();
-    entries.forEach(e => {
+    const source = allEntries || entries;
+    source.forEach(e => {
       if (e.createdAt) {
         const d = e.createdAt.toDate();
         const val = format(d, 'yyyy-MM');
@@ -66,7 +91,7 @@ export function Feed({ entries, loading, onEdit }: FeedProps) {
       }
     });
     return Array.from(map.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => b.value.localeCompare(a.value));
-  }, [entries]);
+  }, [allEntries, entries]);
 
   const filteredEntries = React.useMemo(() => {
     return entries.filter(e => {
@@ -81,6 +106,21 @@ export function Feed({ entries, loading, onEdit }: FeedProps) {
       return true;
     });
   }, [entries, filterMonth, filterMood, filterPhoto, filterFavorite]);
+
+  const allFilteredEntries = React.useMemo(() => {
+    const source = allEntries || entries;
+    return source.filter(e => {
+      if (filterMonth !== 'all') {
+        if (!e.createdAt) return false;
+        if (format(e.createdAt.toDate(), 'yyyy-MM') !== filterMonth) return false;
+      }
+      if (filterMood !== 'all' && e.mood !== filterMood) return false;
+      if (filterPhoto === 'photos' && !e.image) return false;
+      if (filterPhoto === 'no-photos' && e.image) return false;
+      if (filterFavorite && !e.favorite) return false;
+      return true;
+    });
+  }, [allEntries, entries, filterMonth, filterMood, filterPhoto, filterFavorite]);
 
   const toggleFavorite = async (entry: Entry) => {
     if (!auth.currentUser) return;
@@ -180,9 +220,9 @@ export function Feed({ entries, loading, onEdit }: FeedProps) {
     );
   }
 
-  const totalPosts = filteredEntries.length;
-  const totalPhotos = filteredEntries.filter(e => e.image).length;
-  const totalMoods = filteredEntries.filter(e => e.mood).length;
+  const totalPosts = allFilteredEntries.length;
+  const totalPhotos = allFilteredEntries.filter(e => e.image).length;
+  const totalMoods = allFilteredEntries.filter(e => e.mood).length;
 
   return (
     <div className="flex flex-col gap-4 pb-24">
@@ -239,7 +279,11 @@ export function Feed({ entries, loading, onEdit }: FeedProps) {
           </div>
           
           <div className="text-xs font-bold text-md-sys-color-on-surface-variant/65 uppercase tracking-wider">
-            {filteredEntries.length === entries.length ? 'Showing All' : `Found ${filteredEntries.length}`}
+            {activeFiltersCount === 0 ? (
+              (allEntries && entries.length < allEntries.length) ? `Showing ${entries.length} of ${allEntries.length}` : 'Showing All'
+            ) : (
+              `Found ${allFilteredEntries.length}`
+            )}
           </div>
         </div>
 
@@ -600,6 +644,21 @@ export function Feed({ entries, loading, onEdit }: FeedProps) {
           )}
         </div>
       )))}
+
+      {/* Infinite Scroll Trigger element */}
+      {hasMore && (
+        <div 
+          ref={loaderRef} 
+          className="w-full py-6 flex items-center justify-center text-md-sys-color-primary"
+        >
+          <div className="flex items-center gap-1.5 text-xs font-bold opacity-85">
+            <span className="w-2-px h-2-px p-1 bg-md-sys-color-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-2-px h-2-px p-1 bg-md-sys-color-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-2-px h-2-px p-1 bg-md-sys-color-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <span className="ml-1.5 text-md-sys-color-on-surface-variant font-medium">Catching up on memories...</span>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
