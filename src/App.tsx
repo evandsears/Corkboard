@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { auth, db } from './firebase';
-import { signInWithPopup, signInWithCredential, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
+import { signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp, collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { Feed } from './components/Feed';
 import { CalendarView } from './components/CalendarView';
@@ -164,6 +164,35 @@ export default function App() {
     setPostsLimit((prev) => Math.min(prev + 10, 9990));
   }, []);
 
+  // Handle Google Sign-In redirect results on mount
+  useEffect(() => {
+    const checkRedirect = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const userRef = doc(db, 'users', result.user.uid);
+          const userSnap = await getDoc(userRef);
+          
+          if (!userSnap.exists()) {
+            const userData: any = {
+              uid: result.user.uid,
+              email: result.user.email,
+              createdAt: serverTimestamp(),
+            };
+            if (result.user.displayName) userData.displayName = result.user.displayName;
+            if (result.user.photoURL) userData.photoURL = result.user.photoURL;
+            
+            await setDoc(userRef, userData);
+          }
+        }
+      } catch (err: any) {
+        console.error("Redirect auth handle error: ", err);
+        // Do not block app usage if check redirect fails (e.g., loaded without redirect action)
+      }
+    };
+    checkRedirect();
+  }, []);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -313,7 +342,19 @@ export default function App() {
     }
 
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({
+      prompt: 'select_account'
+    });
+
     try {
+      const isMobile = typeof window !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      
+      if (isMobile) {
+        console.log("Mobile context detected. Triggering redirect authentication instead of popup...");
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+
       const result = await signInWithPopup(auth, provider);
       
       const userRef = doc(db, 'users', result.user.uid);
@@ -332,17 +373,28 @@ export default function App() {
       }
     } catch (error: any) {
       console.error("Error signing in", error);
+      
+      // If popup blocker, operations restriction, or in-app webview complains about popups, run redirect fallback
       if (
+        error?.code === 'auth/popup-blocked' ||
         error?.code === 'auth/operation-not-allowed' || 
-        error?.code === 'auth/invalid-action-code' || 
         error?.code === 'auth/invalid-api-wrapper' || 
-        error?.message?.includes('invalid') || 
-        error?.message?.includes('action')
+        error?.message?.includes('popup') || 
+        error?.message?.includes('web-context') ||
+        error?.message?.includes('WebView') ||
+        error?.message?.includes('webview') ||
+        error?.message?.includes('restriction')
       ) {
-        setAuthError(
-          "This Google action is restricted in mobile WebViews. Please sign up or log in using the secure 'Email & Password' option below!"
-        );
-        setShowEmailAuth(true);
+        try {
+          console.log("Popup not supported or blocked. Cascading to signInWithRedirect...");
+          await signInWithRedirect(auth, provider);
+        } catch (redirectError: any) {
+          console.error("Redirect recovery failed:", redirectError);
+          setAuthError(
+            "This Google action is restricted in mobile WebViews. Please sign up or log in using the secure 'Email & Password' option below!"
+          );
+          setShowEmailAuth(true);
+        }
       } else {
         setAuthError(error?.message || "Failed to log in with Google. Please try the Email & Password option.");
       }
