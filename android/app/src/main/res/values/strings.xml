@@ -4,4 +4,5 @@
     <string name="title_activity_main">Corkboard</string>
     <string name="package_name">com.corkboard.app</string>
     <string name="custom_url_scheme">com.corkboard.app</string>
+    <string name="server_client_id">652061751245-eqierj45r5kagkc21ojdvos38182inv7.apps.googleusercontent.com</string>
 </resources>

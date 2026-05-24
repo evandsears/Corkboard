@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { auth, db } from './firebase';
-import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
+import { signInWithPopup, signInWithCredential, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp, collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { Feed } from './components/Feed';
 import { CalendarView } from './components/CalendarView';
@@ -254,21 +254,67 @@ export default function App() {
     // Detect Capacitor or native mobile environment where standard web popups are restricted
     const isNative = typeof window !== 'undefined' && (
       (window as any).Capacitor?.isNativePlatform?.() || 
-      window.location.protocol === 'capacitor:' || 
-      (window.location.hostname === 'localhost' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
+      window.location.protocol === 'capacitor:'
     );
 
+    setAuthError(null);
+
     if (isNative) {
-      setAuthError(
-        "Google Sign-In popups are not supported inside mobile native WebViews. " +
-        "Please use the secure 'Email & Password' login option below to sign up or sign in instantly on your device!"
-      );
-      setShowEmailAuth(true);
-      return;
+      try {
+        const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+        
+        try {
+          await GoogleAuth.initialize();
+        } catch (initErr) {
+          console.log("GoogleAuth.initialize internal handler:", initErr);
+        }
+        
+        const googleUser = await GoogleAuth.signIn();
+        const idToken = googleUser?.authentication?.idToken;
+        
+        if (!idToken) {
+          throw new Error("No Identity Token. Make sure your client configuration matches.");
+        }
+        
+        const credential = GoogleAuthProvider.credential(idToken);
+        const result = await signInWithCredential(auth, credential);
+        
+        const userRef = doc(db, 'users', result.user.uid);
+        const userSnap = await getDoc(userRef);
+        
+        if (!userSnap.exists()) {
+          const userData: any = {
+            uid: result.user.uid,
+            email: result.user.email,
+            createdAt: serverTimestamp(),
+          };
+          if (result.user.displayName) userData.displayName = result.user.displayName;
+          if (result.user.photoURL) userData.photoURL = result.user.photoURL;
+          
+          await setDoc(userRef, userData);
+        }
+        return; // Success!
+      } catch (nativeError: any) {
+        console.error("Native Google login error:", nativeError);
+        
+        // Check if user dismissed the native dialog
+        if (nativeError?.message?.includes('user') && nativeError?.message?.includes('cancel')) {
+          setAuthError("Sign-in canceled by user.");
+          return;
+        }
+
+        setAuthError(
+          "Native Google Sign-In is pre-coded! To activate this in your local Android Studio / Google Play build, configure your Google credentials:\n\n" +
+          "• Enable 'Google' sign-in in your Firebase Auth Console.\n" +
+          "• Register your Android app (com.corkboard.app) in Firebase.\n" +
+          "• Use standard 'Email & Password' login choice below to sign in instantly without any setups!"
+        );
+        setShowEmailAuth(true);
+        return;
+      }
     }
 
     const provider = new GoogleAuthProvider();
-    setAuthError(null);
     try {
       const result = await signInWithPopup(auth, provider);
       

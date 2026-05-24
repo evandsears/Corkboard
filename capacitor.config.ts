@@ -11,6 +11,11 @@ const config: CapacitorConfig = {
     AdMob: {
       appId: 'ca-app-pub-5109081999190590~3206185208', // Live Google AdMob App ID
     },
+    GoogleAuth: {
+      scopes: ['profile', 'email'],
+      clientId: '652061751245-eqierj45r5kagkc21ojdvos38182inv7.apps.googleusercontent.com', // Real Client ID from user
+      forceCodeForRefreshToken: true,
+    },
   },
 };
 
