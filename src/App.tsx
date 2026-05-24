@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { auth, db } from './firebase';
 import { signInWithPopup, signInWithCredential, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp, collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
@@ -252,10 +253,7 @@ export default function App() {
 
   const handleSignIn = async () => {
     // Detect Capacitor or native mobile environment where standard web popups are restricted
-    const isNative = typeof window !== 'undefined' && (
-      (window as any).Capacitor?.isNativePlatform?.() || 
-      window.location.protocol === 'capacitor:'
-    );
+    const isNative = Capacitor.isNativePlatform();
 
     setAuthError(null);
 
