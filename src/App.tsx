@@ -140,6 +140,7 @@ export default function App() {
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showEmailAuth, setShowEmailAuth] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loadingEntries, setLoadingEntries] = useState(true);
@@ -250,7 +251,24 @@ export default function App() {
   };
 
   const handleSignIn = async () => {
+    // Detect Capacitor or native mobile environment where standard web popups are restricted
+    const isNative = typeof window !== 'undefined' && (
+      (window as any).Capacitor?.isNativePlatform?.() || 
+      window.location.protocol === 'capacitor:' || 
+      (window.location.hostname === 'localhost' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent))
+    );
+
+    if (isNative) {
+      setAuthError(
+        "Google Sign-In popups are not supported inside mobile native WebViews. " +
+        "Please use the secure 'Email & Password' login option below to sign up or sign in instantly on your device!"
+      );
+      setShowEmailAuth(true);
+      return;
+    }
+
     const provider = new GoogleAuthProvider();
+    setAuthError(null);
     try {
       const result = await signInWithPopup(auth, provider);
       
@@ -268,8 +286,22 @@ export default function App() {
         
         await setDoc(userRef, userData);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error signing in", error);
+      if (
+        error?.code === 'auth/operation-not-allowed' || 
+        error?.code === 'auth/invalid-action-code' || 
+        error?.code === 'auth/invalid-api-wrapper' || 
+        error?.message?.includes('invalid') || 
+        error?.message?.includes('action')
+      ) {
+        setAuthError(
+          "This Google action is restricted in mobile WebViews. Please sign up or log in using the secure 'Email & Password' option below!"
+        );
+        setShowEmailAuth(true);
+      } else {
+        setAuthError(error?.message || "Failed to log in with Google. Please try the Email & Password option.");
+      }
     }
   };
 
@@ -431,6 +463,29 @@ export default function App() {
             transition={{ delay: 0.2, duration: 0.4 }}
             className="w-full flex flex-col gap-3.5 items-center px-1"
           >
+            <AnimatePresence>
+              {authError && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                  className="w-full bg-amber-50/90 border border-amber-200/80 rounded-2xl p-4 flex flex-col gap-1.5 text-left text-xs text-amber-900"
+                >
+                  <div className="flex items-center gap-2 font-bold text-amber-950">
+                    <span className="text-sm">⚠️</span>
+                    <span>WebView Authentication Tip</span>
+                  </div>
+                  <p className="leading-relaxed opacity-95">{authError}</p>
+                  <button 
+                    onClick={() => setAuthError(null)} 
+                    className="self-end mt-1 text-[10px] font-bold text-amber-800 hover:underline px-2.5 py-1 rounded bg-amber-100/40 hover:bg-amber-100/80 transition-all select-none"
+                  >
+                    Dismiss
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <button
               onClick={handleSignIn}
               className="w-full bg-md-sys-color-primary text-md-sys-color-on-primary py-3.5 sm:py-4 rounded-[20px] text-base font-semibold hover:opacity-95 active:scale-98 transition-all flex items-center justify-center gap-3 shadow-md hover:shadow-lg cursor-pointer animate-duration-300"
