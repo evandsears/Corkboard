@@ -330,11 +330,13 @@ export default function App() {
           return;
         }
 
+        const errDetail = nativeError?.message || (typeof nativeError === 'object' ? JSON.stringify(nativeError) : String(nativeError));
         setAuthError(
-          "Native Google Sign-In is pre-coded! To activate this in your local Android Studio / Google Play build, configure your Google credentials:\n\n" +
-          "• Enable 'Google' sign-in in your Firebase Auth Console.\n" +
-          "• Register your Android app (com.corkboard.app) in Firebase.\n" +
-          "• Use standard 'Email & Password' login choice below to sign in instantly without any setups!"
+          `Google Sign-In Error: "${errDetail}"\n\n` +
+          "Most common causes & fixes:\n" +
+          "• SHA-1 Fingerprint Missing: Add both your local debug and production release SHA-1 certificate fingerprints to your Android app (com.corkboard.app) settings in the Firebase Console!\n" +
+          "• Web Client ID Configuration: Ensure the Web Client ID listed in 'capacitor.config.ts' and 'strings.xml' matches your Firebase Web Client ID exactly.\n" +
+          "• OAuth Consent Screen: Check your Google Cloud Console to ensure your OAuth consent screen is configured and in 'In production' or your test account is added to the Test Users list."
         );
         setShowEmailAuth(true);
         return;
