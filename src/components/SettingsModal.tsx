@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { auth, db } from '../firebase';
 import { updateProfile } from 'firebase/auth';
-import { doc, updateDoc, writeBatch, collection, getDocs, deleteDoc } from 'firebase/firestore';
-import { X, LogOut, Trash2, Loader2, Sparkles, User, AlertTriangle, ShieldAlert, Upload, ShieldCheck, ChevronDown } from 'lucide-react';
+import { doc, updateDoc, writeBatch, collection, getDocs, deleteDoc, setDoc, Timestamp } from 'firebase/firestore';
+import { X, LogOut, Trash2, Loader2, Sparkles, User, AlertTriangle, ShieldAlert, Upload, ShieldCheck, ChevronDown, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface SettingsModalProps {
@@ -26,8 +26,179 @@ export function SettingsModal({ onClose, onUserUpdate }: SettingsModalProps) {
   const [deleteInputText, setDeleteInputText] = useState('');
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ imported: number; total: number } | null>(null);
+  const [importSuccess, setImportSuccess] = useState(false);
 
   if (!user) return null;
+
+  const handleExportData = async () => {
+    setIsExporting(true);
+    setImportSuccess(false);
+    setErrorStatus(null);
+    try {
+      const entriesRef = collection(db, 'users', user.uid, 'entries');
+      const querySnapshot = await getDocs(entriesRef);
+      
+      const entriesData = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          content: data.content || '',
+          mood: data.mood || null,
+          image: data.image || null,
+          favorite: data.favorite || false,
+          createdAt: {
+            seconds: data.createdAt?.seconds || Math.floor(Date.now() / 1000),
+            nanoseconds: data.createdAt?.nanoseconds || 0
+          }
+        };
+      });
+
+      const exportPayload = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        profile: {
+          displayName: user.displayName || '',
+          photoURL: user.photoURL || '',
+        },
+        entries: entriesData
+      };
+
+      const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `corkboard_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error(err);
+      setErrorStatus('Failed to export your journal data.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setImportProgress(null);
+    setImportSuccess(false);
+    setErrorStatus(null);
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const jsonText = event.target?.result as string;
+        const parsedData = JSON.parse(jsonText);
+
+        if (!parsedData || typeof parsedData !== 'object') {
+          throw new Error('Invalid JSON format.');
+        }
+
+        const entriesToImport = parsedData.entries;
+        if (!entriesToImport || !Array.isArray(entriesToImport)) {
+          throw new Error('Invalid backup file. Could not find entries.');
+        }
+
+        // 1. Restore profile details if available and not set
+        if (parsedData.profile) {
+          const userUpdatePayload: any = {};
+          const docUpdatePayload: any = {};
+          
+          if (parsedData.profile.displayName && !user.displayName) {
+            userUpdatePayload.displayName = parsedData.profile.displayName;
+            docUpdatePayload.displayName = parsedData.profile.displayName;
+          }
+          if (parsedData.profile.photoURL && !user.photoURL) {
+            userUpdatePayload.photoURL = parsedData.profile.photoURL;
+            docUpdatePayload.photoURL = parsedData.profile.photoURL;
+          }
+          
+          if (Object.keys(userUpdatePayload).length > 0) {
+            await updateProfile(user, userUpdatePayload);
+            const userRef = doc(db, 'users', user.uid);
+            await updateDoc(userRef, docUpdatePayload);
+            onUserUpdate({ ...user, ...userUpdatePayload });
+          }
+        }
+
+        // 2. Import entries in chunks
+        const totalEntries = entriesToImport.length;
+        if (totalEntries === 0) {
+          setImportSuccess(true);
+          setIsImporting(false);
+          return;
+        }
+
+        setImportProgress({ imported: 0, total: totalEntries });
+        const chunkSize = 25;
+
+        for (let i = 0; i < totalEntries; i += chunkSize) {
+          const chunk = entriesToImport.slice(i, i + chunkSize);
+          const batch = writeBatch(db);
+
+          chunk.forEach((entry: any) => {
+            const entryId = entry.id || doc(collection(db, 'placeholder')).id;
+            const entryRef = doc(db, 'users', user.uid, 'entries', entryId);
+
+            const seconds = entry.createdAt?.seconds || Math.floor(Date.now() / 1000);
+            const nanoseconds = entry.createdAt?.nanoseconds || 0;
+            const createdAtTimestamp = new Timestamp(seconds, nanoseconds);
+
+            const entryData: any = {
+              uid: user.uid,
+              createdAt: createdAtTimestamp,
+            };
+
+            if (entry.content) {
+              entryData.content = entry.content;
+            }
+            if (entry.mood) {
+              entryData.mood = entry.mood;
+            }
+            if (entry.image) {
+              entryData.image = entry.image;
+            }
+            if (typeof entry.favorite === 'boolean') {
+              entryData.favorite = entry.favorite;
+            }
+
+            batch.set(entryRef, entryData, { merge: true });
+          });
+
+          await batch.commit();
+          setImportProgress({ imported: Math.min(i + chunkSize, totalEntries), total: totalEntries });
+        }
+
+        try {
+          const m = await import('../lib/notifications');
+          m.scheduleDailyReminder();
+        } catch (_) {}
+
+        setImportSuccess(true);
+      } catch (err: any) {
+        console.error(err);
+        setErrorStatus(`Failed to import backup: ${err.message || 'Unknown error. Check file format.'}`);
+      } finally {
+        setIsImporting(false);
+        e.target.value = '';
+      }
+    };
+
+    reader.onerror = () => {
+      setErrorStatus('Failed to read backup file.');
+      setIsImporting(false);
+    };
+
+    reader.readAsText(file);
+  };
 
   const handleSelectEmoji = async (emoji: string) => {
     try {
@@ -306,6 +477,80 @@ export function SettingsModal({ onClose, onUserUpdate }: SettingsModalProps) {
                 <span className="text-sm font-semibold text-md-sys-color-on-surface">Sign Out of Account</span>
               </div>
             </button>
+          </div>
+
+          <hr className="border-md-sys-color-surface-variant/50" />
+
+          {/* Backup & Migration Section */}
+          <div className="flex flex-col gap-3">
+            <h3 className="text-sm font-bold tracking-wider text-md-sys-color-on-surface-variant uppercase px-0.5">
+              Backup & Migration
+            </h3>
+            
+            <div className="flex flex-col gap-3 bg-md-sys-color-surface-variant/10 p-4 rounded-2xl border border-md-sys-color-surface-variant/20">
+              <p className="text-xs text-md-sys-color-on-surface-variant leading-relaxed">
+                Export your entire micro-journal logbook, mood states, and profile details to a JSON data file, or import a backup file to seamlessly restore your history on this account.
+              </p>
+              
+              <div className="flex flex-col sm:flex-row gap-2.5 mt-1">
+                {/* Export button */}
+                <button
+                  type="button"
+                  onClick={handleExportData}
+                  disabled={isExporting || isImporting}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-md-sys-color-surface border border-md-sys-color-primary/30 hover:bg-md-sys-color-primary/5 text-md-sys-color-primary rounded-2xl text-xs sm:text-sm font-bold active:scale-[0.98] transition-all disabled:opacity-50 select-none cursor-pointer"
+                >
+                  {isExporting ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Download size={16} />
+                  )}
+                  Export Data (JSON)
+                </button>
+
+                {/* Import button / label trigger */}
+                <label className="flex-1">
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportData}
+                    disabled={isExporting || isImporting}
+                    className="hidden"
+                  />
+                  <div className={`w-full flex items-center justify-center gap-2 py-3 px-4 bg-md-sys-color-primary hover:bg-md-sys-color-primary-container text-md-sys-color-on-primary hover:text-md-sys-color-on-primary-container rounded-2xl text-xs sm:text-sm font-bold active:scale-[0.98] transition-all cursor-pointer select-none text-center ${isExporting || isImporting ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}>
+                    {isImporting ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <Upload size={16} />
+                    )}
+                    Import Data (JSON)
+                  </div>
+                </label>
+              </div>
+
+              {/* Progress Bar Display */}
+              {importProgress !== null && (
+                <div className="mt-2 p-3 bg-md-sys-color-primary-container/20 border border-md-sys-color-primary/20 rounded-xl flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between text-xs font-semibold text-md-sys-color-primary">
+                    <span>Restoring journal entries...</span>
+                    <span>{importProgress.imported} / {importProgress.total}</span>
+                  </div>
+                  <div className="w-full bg-md-sys-color-surface-variant/30 h-1.5 rounded-full overflow-hidden">
+                    <div 
+                      className="bg-md-sys-color-primary h-full transition-all duration-300"
+                      style={{ width: `${(importProgress.imported / importProgress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {importSuccess && (
+                <div className="mt-1 p-2.5 bg-green-500/10 border border-green-500/20 text-green-700 text-xs font-semibold rounded-xl flex items-center gap-2">
+                  <span className="text-base select-none font-bold">✓</span>
+                  <span>Successfully imported all data! Close settings to view your imported journal.</span>
+                </div>
+              )}
+            </div>
           </div>
 
           <hr className="border-md-sys-color-surface-variant/50" />
