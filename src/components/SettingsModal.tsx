@@ -132,19 +132,18 @@ export function SettingsModal({ onClose, onUserUpdate }: SettingsModalProps) {
         // 2. Import entries in chunks
         const totalEntries = entriesToImport.length;
         if (totalEntries === 0) {
+          setImportProgress({ imported: 0, total: 0 });
           setImportSuccess(true);
           setIsImporting(false);
           return;
         }
 
         setImportProgress({ imported: 0, total: totalEntries });
-        const chunkSize = 25;
 
-        for (let i = 0; i < totalEntries; i += chunkSize) {
-          const chunk = entriesToImport.slice(i, i + chunkSize);
-          const batch = writeBatch(db);
-
-          chunk.forEach((entry: any) => {
+        let successCount = 0;
+        for (let i = 0; i < totalEntries; i++) {
+          const entry = entriesToImport[i];
+          try {
             const entryId = entry.id || doc(collection(db, 'placeholder')).id;
             const entryRef = doc(db, 'users', user.uid, 'entries', entryId);
 
@@ -170,11 +169,16 @@ export function SettingsModal({ onClose, onUserUpdate }: SettingsModalProps) {
               entryData.favorite = entry.favorite;
             }
 
-            batch.set(entryRef, entryData, { merge: true });
-          });
+            // Write individual document
+            await setDoc(entryRef, entryData, { merge: true });
+            successCount++;
+          } catch (itemErr) {
+            console.error(`Failed to import individual entry index ${i}:`, itemErr);
+            // Gracefully continue to import rest of the user logs
+          }
 
-          await batch.commit();
-          setImportProgress({ imported: Math.min(i + chunkSize, totalEntries), total: totalEntries });
+          // Update progress on every single item
+          setImportProgress({ imported: i + 1, total: totalEntries });
         }
 
         try {
@@ -544,10 +548,10 @@ export function SettingsModal({ onClose, onUserUpdate }: SettingsModalProps) {
                 </div>
               )}
 
-              {importSuccess && (
+              {importSuccess && importProgress && (
                 <div className="mt-1 p-2.5 bg-green-500/10 border border-green-500/20 text-green-700 text-xs font-semibold rounded-xl flex items-center gap-2">
                   <span className="text-base select-none font-bold">✓</span>
-                  <span>Successfully imported all data! Close settings to view your imported journal.</span>
+                  <span>Successfully restored {importProgress.imported} of {importProgress.total} entries! Close settings to view your imported journal.</span>
                 </div>
               )}
             </div>
