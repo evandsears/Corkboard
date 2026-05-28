@@ -141,9 +141,14 @@ export function SettingsModal({ onClose, onUserUpdate }: SettingsModalProps) {
         setImportProgress({ imported: 0, total: totalEntries });
 
         let successCount = 0;
-        for (let i = 0; i < totalEntries; i++) {
-          const entry = entriesToImport[i];
-          try {
+        const allowedMoods = ['happy', 'calm', 'neutral', 'sad', 'anxious', 'angry', 'excited', 'tired', 'focused', 'confused', 'horny'];
+        const chunkSize = 500;
+
+        for (let i = 0; i < totalEntries; i += chunkSize) {
+          const chunk = entriesToImport.slice(i, i + chunkSize);
+          const batch = writeBatch(db);
+
+          chunk.forEach((entry: any) => {
             const entryId = entry.id || doc(collection(db, 'placeholder')).id;
             const entryRef = doc(db, 'users', user.uid, 'entries', entryId);
 
@@ -156,29 +161,92 @@ export function SettingsModal({ onClose, onUserUpdate }: SettingsModalProps) {
               createdAt: createdAtTimestamp,
             };
 
-            if (entry.content) {
-              entryData.content = entry.content;
+            let contentStr = entry.content || '';
+            let imageStr = entry.image || '';
+
+            // Handle security rules constraint: must have either non-empty content or image
+            if (!contentStr.trim() && !imageStr.trim()) {
+              contentStr = ' ';
             }
-            if (entry.mood) {
+
+            if (contentStr) {
+              entryData.content = contentStr.slice(0, 280);
+            }
+            if (imageStr) {
+              if (imageStr.length <= 800000) {
+                entryData.image = imageStr;
+              } else {
+                entryData.content = (entryData.content ? entryData.content.slice(0, 250) + ' ' : '') + '[Image too large to import]';
+              }
+            }
+
+            if (entry.mood && allowedMoods.includes(entry.mood)) {
               entryData.mood = entry.mood;
-            }
-            if (entry.image) {
-              entryData.image = entry.image;
             }
             if (typeof entry.favorite === 'boolean') {
               entryData.favorite = entry.favorite;
             }
 
-            // Write individual document
-            await setDoc(entryRef, entryData, { merge: true });
-            successCount++;
-          } catch (itemErr) {
-            console.error(`Failed to import individual entry index ${i}:`, itemErr);
-            // Gracefully continue to import rest of the user logs
-          }
+            batch.set(entryRef, entryData, { merge: true });
+          });
 
-          // Update progress on every single item
-          setImportProgress({ imported: i + 1, total: totalEntries });
+          try {
+            await batch.commit();
+            successCount += chunk.length;
+            // Update progress incrementally after batch success
+            setImportProgress({ imported: Math.min(i + chunk.length, totalEntries), total: totalEntries });
+          } catch (batchErr) {
+            console.error(`Failed to commit batch for chunk starting at index ${i}:`, batchErr);
+            // Fallback: write individually if the batch commit fails (e.g., due to individual item size, invalid format, etc.)
+            for (let j = 0; j < chunk.length; j++) {
+              const entry = chunk[j];
+              try {
+                const entryId = entry.id || doc(collection(db, 'placeholder')).id;
+                const entryRef = doc(db, 'users', user.uid, 'entries', entryId);
+
+                const seconds = entry.createdAt?.seconds || Math.floor(Date.now() / 1000);
+                const nanoseconds = entry.createdAt?.nanoseconds || 0;
+                const createdAtTimestamp = new Timestamp(seconds, nanoseconds);
+
+                const entryData: any = {
+                  uid: user.uid,
+                  createdAt: createdAtTimestamp,
+                };
+
+                let contentStr = entry.content || '';
+                let imageStr = entry.image || '';
+
+                if (!contentStr.trim() && !imageStr.trim()) {
+                  contentStr = ' ';
+                }
+
+                if (contentStr) {
+                  entryData.content = contentStr.slice(0, 280);
+                }
+                if (imageStr) {
+                  if (imageStr.length <= 800000) {
+                    entryData.image = imageStr;
+                  } else {
+                    entryData.content = (entryData.content ? entryData.content.slice(0, 250) + ' ' : '') + '[Image too large to import]';
+                  }
+                }
+
+                if (entry.mood && allowedMoods.includes(entry.mood)) {
+                  entryData.mood = entry.mood;
+                }
+                if (typeof entry.favorite === 'boolean') {
+                  entryData.favorite = entry.favorite;
+                }
+
+                await setDoc(entryRef, entryData, { merge: true });
+                successCount++;
+              } catch (itemErr) {
+                console.error(`Fallback failed for entry in chunk at index ${i + j}:`, itemErr);
+              }
+            }
+            // Update progress after fallback completes
+            setImportProgress({ imported: Math.min(i + chunk.length, totalEntries), total: totalEntries });
+          }
         }
 
         try {
